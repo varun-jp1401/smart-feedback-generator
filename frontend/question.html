@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edcite - Questions</title>
+    <link rel="stylesheet" href="styles/question.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="header">
+        <img src="images/edcite_logo_small.png" class="logo" alt="Edcite Logo">
+        <div id="grade" class="grade-label">Grade</div>
+        <div class="user-section">
+            <span>Welcome, <span id="username">User</span></span>
+            <button onclick="logout()" class="logout-btn">Logout</button>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="left-panel">
+            <div id="question-text" class="question-text">Loading question...</div>
+            <textarea id="student-answer" placeholder="Write your answer here..."></textarea>
+            <div class="actions">
+                <button id="submit-btn" onclick="submitAnswer()">Submit Answer</button>
+                <button id="retry-btn" onclick="retryQuestion()" style="display: none;">Retry</button>
+                <button id="next-btn" onclick="nextQuestion()" style="display: none;">Next</button>
+            </div>
+            <div id="feedback" class="feedback-box"></div>
+        </div>
+
+        <div class="right-panel">
+            <div class="palette-container">
+                <h3>Question Palette</h3>
+                <div id="palette" class="palette-grid"></div>
+                <div class="legend">
+                    <div><span class="dot answered"></span> Answered</div>
+                    <div><span class="dot not-answered"></span> Not Answered</div>
+                    <div><span class="dot not-visited"></span> Not Visited</div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <script src="scripts/question.js"></script>
+</body>
+</html>

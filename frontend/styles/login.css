@@ -1,0 +1,104 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-image: url('../images/bg.webp');  /* ✅ your background image */
+    background-size: cover;
+    background-position: center;
+    font-family: 'Roboto', Arial, sans-serif;
+}
+
+.login-container {
+    background: rgba(255, 255, 255, 0.95);
+    width: 350px;
+    margin: 100px auto;
+    padding: 30px 40px;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    text-align: center;
+    height: 400px;
+}
+
+.logo {
+    width: 180px;
+    margin-bottom: 18px;
+    margin-top: 10px;
+}
+
+.login-text {
+    margin-bottom: 20px;
+    font-size: 25px;
+    font-weight: bold;
+    background: linear-gradient(90deg, #071c26 0%, #96bd3d 0%, #57c785 32%, #faa21b 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+}
+
+form input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+
+form button {
+    width: 300px;
+    padding: 12px;
+    background-color:#96bd3d;
+    color: white; 
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 550;
+    font-size: 16px;
+    margin-top: 5px;
+}
+
+form button:hover {
+    background-color: #ffa41c;
+}
+form button:active{
+    opacity: 0.7;
+}
+
+p {
+    font-size: 14px;
+    color: #444;
+}
+
+p a {
+    color: #0077cc;
+    text-decoration: none;
+}
+
+p a:hover {
+    text-decoration: underline;
+}
+
+#loading {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(255,255,255,0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+}
+
+.loader {
+    border: 6px solid #f3f3f3;
+    border-top: 6px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

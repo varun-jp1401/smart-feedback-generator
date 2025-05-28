@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edcite - Register</title>
+    <link rel="stylesheet" href="styles/register.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="register-container">
+        <img src="images/edcite_logo_small.png" alt="Edcite Logo" class="logo">
+        <form id="register-form">
+            <div class="register-text">Create an Account</div>
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <input type="password" name="confirm_password" placeholder="Confirm Password" required>
+
+            <select name="grade" required>
+                <option value="">Select Grade</option>
+                <option value="5">Grade 5</option>
+                <option value="6">Grade 6</option>
+                <option value="7">Grade 7</option>
+            </select>
+
+            <button class="register-button" type="submit">Register</button>
+        </form>
+        <p style="margin-top: 15px;">
+            Already have an account? <a href="login.html">Login here</a>
+        </p>
+    </div>
+
+    <div id="loading" style="display: none;">
+        <div class="loader"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById("register-form");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const username = formData.get("username");
+            const password = formData.get("password");
+            const confirmPassword = formData.get("confirm_password");
+            const grade = formData.get("grade");
+
+            if (password !== confirmPassword) {
+                alert("Passwords do not match.");
+                return;
+            }
+
+            document.getElementById("loading").style.display = "flex";
+
+            try {
+                const response = await fetch("http://127.0.0.1:5000/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password, grade })
+                });
+
+                const result = await response.json();
+                document.getElementById("loading").style.display = "none";
+
+                if (response.ok) {
+                    alert(result.message);
+                    window.location.href = "login.html";
+                } else {
+                    alert(result.error || "Registration failed.");
+                }
+            } catch (err) {
+                document.getElementById("loading").style.display = "none";
+                alert("An error occurred. Please try again.");
+            }
+        });
+    </script>
+</body>
+</html>
