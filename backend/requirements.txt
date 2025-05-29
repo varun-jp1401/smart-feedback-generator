@@ -1,0 +1,10 @@
+flask
+flask-cors
+pymysql
+requests
+python-dotenv
+pandas
+scikit-learn
+sentence-transformers
+keybert
+mysql-connector-python
