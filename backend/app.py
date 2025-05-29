@@ -11,6 +11,9 @@ import mysql.connector
 from mysql.connector import Error
 from difflib import SequenceMatcher
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
@@ -20,7 +23,7 @@ CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 kw_model = KeyBERT(model='all-MiniLM-L6-v2')
 
 TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
-TOGETHER_API_KEY = "92328edde95f65943128cf7ee4cef72431aaccd8de8cde7eef4c1195cad68a2e"
+TOGETHER_API_KEY = os.getenv("API_KEY")
 MODEL_NAME = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
 
 HEADERS = {
@@ -219,7 +222,7 @@ def build_prompt(question, ideal_answer, student_answer, missing_keywords):
         hint = "It seems the student may have missed one or more important scientific ideas. Consider gently prompting them to revisit key parts of the process."
 
     return (
-        f"You are a supportive but strict middle school science teacher.\n\n"
+        f"You are a supportive but strict middle school science teacher and you are giving the feedback to the students.\n\n"
         f"Question: {question}\n"
         f"Ideal Answer: {ideal_answer}\n"
         f"Student Answer: {student_answer}\n\n"

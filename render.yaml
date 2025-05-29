@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: smart-feedback-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python backend/app.py
+    envVars:
+      - key: API_KEY
+        sync: false  # You will set this manually on the Render dashboard
