@@ -1,7 +1,7 @@
 body {
     margin: 0;
     padding: 0;
-    background-image: url('../images/bg.webp');  /* Same image as login */
+    background-image: url('../images/bg.webp'); 
     background-size: cover;
     background-position: center;
     font-family: 'Roboto', Arial, sans-serif;

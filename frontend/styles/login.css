@@ -102,3 +102,56 @@ p a:hover {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+
+.reference-link {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    background-color: rgba(127, 197, 6, 0.9);
+    padding: 8px 15px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #333;
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid #ddd;
+    transition: all 0.3s ease;
+    z-index: 1000;
+}
+
+.reference-link:hover {
+    background-color: #f79b1b;
+    border-color: #007bff;
+    color: #007bff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.15);
+}
+
+
+.reference-link.modern {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.reference-link.modern:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    color: white;
+}
+
+/* Minimalist style */
+.reference-link.minimal {
+    background: transparent;
+    border: 2px solid #007bff;
+    color: #007bff;
+    padding: 6px 12px;
+}
+
+.reference-link.minimal:hover {
+    background-color: #007bff;
+    color: white;
+}
+

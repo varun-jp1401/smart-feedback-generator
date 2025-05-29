@@ -33,6 +33,7 @@ window.onload = async () => {
         questions = data.questions;
         renderPalette();
         showQuestion();
+        updateEarlySubmitButton(); 
     } catch (err) {
         document.getElementById("question-text").innerText = "❌ Error loading questions.";
         console.error(err);
@@ -49,6 +50,20 @@ function renderPalette() {
         btn.className = status[i];
         btn.onclick = () => jumpToQuestion(i);
         palette.appendChild(btn);
+    }
+    updateEarlySubmitButton(); 
+}
+
+
+function updateEarlySubmitButton() {
+    const earlySubmitBtn = document.getElementById("early-submit-btn");
+    const answeredCount = status.filter(s => s === "answered").length;
+    
+    if (answeredCount > 0 && currentQuestionIndex < questions.length - 1) {
+        earlySubmitBtn.style.display = "block";
+        earlySubmitBtn.innerText = `Submit Test (${answeredCount}/5 answered)`;
+    } else {
+        earlySubmitBtn.style.display = "none";
     }
 }
 
@@ -74,6 +89,7 @@ function showQuestion() {
         document.getElementById("retry-btn").style.display = "none";
         document.getElementById("next-btn").style.display = "none";
     }
+    updateEarlySubmitButton(); 
 }
 
 async function submitAnswer() {
@@ -115,7 +131,7 @@ async function submitAnswer() {
         document.getElementById("submit-btn").style.display = "none";
         document.getElementById("retry-btn").style.display = "inline-block";
 
-        if (currentQuestionIndex < questions.length - 1) { // FIXED: Use questions.length
+        if (currentQuestionIndex < questions.length - 1) { 
             document.getElementById("next-btn").style.display = "inline-block";
             document.getElementById("next-btn").innerText = "Next";
         } else {
@@ -153,18 +169,36 @@ async function nextQuestion() {
         renderPalette();
         showQuestion();
     } else {
-        // Calculate and show score before submitting
+     
+        await calculateAndShowScore();
+    }
+}
+
+
+async function earlySubmit() {
+    const answeredCount = status.filter(s => s === "answered").length;
+    
+    if (answeredCount === 0) {
+        alert("Please answer at least one question before submitting.");
+        return;
+    }
+    
+    const confirmMessage = `You have answered ${answeredCount} out of ${questions.length} questions. Are you sure you want to submit the test now?`;
+    
+    if (confirm(confirmMessage)) {
+      
+        userAnswers[currentQuestionIndex] = document.getElementById("student-answer").value.trim();
         await calculateAndShowScore();
     }
 }
 
 async function calculateAndShowScore() {
     try {
-        // Show loading message
+       
         document.getElementById("question-text").innerText = "Calculating your score...";
         document.getElementById("feedback").innerHTML = '<div class="loader">🔄 Processing your answers...</div>';
         
-        // Hide action buttons
+       
         document.getElementById("submit-btn").style.display = "none";
         document.getElementById("retry-btn").style.display = "none";
         document.getElementById("next-btn").style.display = "none";
@@ -199,7 +233,6 @@ function displayScoreResults(scoreData) {
         </div>
     `;
 
-
     const scoreHtml = `
         <div id="score-container">
             <div class="total-score">
@@ -232,6 +265,7 @@ function displayScoreResults(scoreData) {
             </div>
             
             <div class="action-buttons">
+                <button onclick="showAnswerReview()" class="review-btn">Review Answers</button>
                 <button onclick="restartTest()" class="restart-btn">Take Another Test</button>
                 <button onclick="logout()" class="logout-btn">Logout</button>
             </div>
@@ -240,7 +274,7 @@ function displayScoreResults(scoreData) {
 
     document.getElementById("feedback").innerHTML = scoreHtml;
     
-    // Animate score bars
+    
     setTimeout(() => {
         const scoreFills = document.querySelectorAll('.score-fill');
         scoreFills.forEach(fill => {
@@ -249,13 +283,94 @@ function displayScoreResults(scoreData) {
     }, 100);
 }
 
+function showAnswerReview() {
+    document.getElementById("question-text").innerHTML = `
+        <div class="score-header">
+            <h2>📋 Answer Review</h2>
+            <p>Compare your answers with the ideal answers:</p>
+        </div>
+    `;
+
+    const reviewHtml = `
+        <div id="answer-review-container">
+            ${questions.map((q, index) => `
+                <div class="answer-comparison">
+                    <div class="question-header">
+                        <h4>Question ${index + 1}:</h4>
+                        <p class="question-text">${q.Question}</p>
+                    </div>
+                    
+                    <div class="answers-grid">
+                        <div class="your-answer">
+                            <h5>Your Answer:</h5>
+                            <div class="answer-content ${userAnswers[index] ? 'has-answer' : 'no-answer'}">
+                                ${userAnswers[index] || '<em>No answer provided</em>'}
+                            </div>
+                        </div>
+                        
+                        <div class="ideal-answer">
+                            <h5>Ideal Answer:</h5>
+                            <div class="answer-content ideal">
+                                ${q.Answer}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="comparison-note">
+                        ${getComparisonNote(userAnswers[index], q.Answer)}
+                    </div>
+                </div>
+            `).join('')}
+            
+            <div class="review-actions">
+                <button onclick="backToScore()" class="back-btn">Back to Score</button>
+                <button onclick="restartTest()" class="restart-btn">Take Another Test</button>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById("feedback").innerHTML = reviewHtml;
+}
+
+function getComparisonNote(studentAnswer, idealAnswer) {
+    if (!studentAnswer || studentAnswer.trim() === '') {
+        return '<div class="comparison-note missed">❌ You did not answer this question.</div>';
+    }
+    
+    const studentWords = studentAnswer.toLowerCase().split(/\s+/);
+    const idealWords = idealAnswer.toLowerCase().split(/\s+/);
+    
+    const commonWords = studentWords.filter(word => 
+        idealWords.some(idealWord => idealWord.includes(word) || word.includes(idealWord))
+    );
+    
+    const coverage = (commonWords.length / idealWords.length) * 100;
+    
+    if (coverage >= 70) {
+        return '<div class="comparison-note excellent">✅ Excellent! Your answer covers most key points.</div>';
+    } else if (coverage >= 50) {
+        return '<div class="comparison-note good">✨ Good answer! You covered many important points.</div>';
+    } else if (coverage >= 30) {
+        return '<div class="comparison-note partial">⚠️ Partial answer. Some key points were missed.</div>';
+    } else {
+        return '<div class="comparison-note needs-improvement">❌ Answer needs improvement. Please review the ideal answer.</div>';
+    }
+}
+
+
+function backToScore() {
+   
+    location.reload(); 
+}
+
 function restartTest() {
-    // Reset all variables
+   
     currentQuestionIndex = 0;
     status = ["not-visited", "not-visited", "not-visited", "not-visited", "not-visited"];
     userAnswers = ["", "", "", "", ""];
     
-    // Reload questions and start over
+    
     window.location.reload();
 }
 

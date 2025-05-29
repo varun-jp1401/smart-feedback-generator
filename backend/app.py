@@ -195,11 +195,11 @@ def calculate_question_score_simple(ideal_answer, student_answer):
     if not student_answer or student_answer.strip().lower() in ["i don't know", "dont know", "no idea", ""]:
         return 0.0
     
-    # Clean answers
+   
     ideal_clean = ideal_answer.strip().lower()
     student_clean = student_answer.strip().lower()
     
-    # Check similarity
+    
     similarity = SequenceMatcher(None, ideal_clean, student_clean).ratio()
     
     if similarity >= 0.95:  

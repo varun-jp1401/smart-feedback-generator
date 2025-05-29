@@ -16,7 +16,6 @@
             <button onclick="logout()" class="logout-btn">Logout</button>
         </div>
     </div>
-
     <div class="main">
         <div class="left-panel">
             <div id="question-text" class="question-text">Loading question...</div>
@@ -28,7 +27,6 @@
             </div>
             <div id="feedback" class="feedback-box"></div>
         </div>
-
         <div class="right-panel">
             <div class="palette-container">
                 <h3>Question Palette</h3>
@@ -38,11 +36,15 @@
                     <div><span class="dot not-answered"></span> Not Answered</div>
                     <div><span class="dot not-visited"></span> Not Visited</div>
                 </div>
+             
+                <div class="early-submit-section">
+                    <button id="early-submit-btn" onclick="earlySubmit()" class="early-submit-btn" style="display: none;">
+                        Submit Test Early
+                    </button>
+                </div>
             </div>
         </div>
-        
     </div>
-
     <script src="scripts/question.js"></script>
 </body>
 </html>
