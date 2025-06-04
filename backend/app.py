@@ -7,6 +7,7 @@ import time
 import random
 import pandas as pd
 from keybert import KeyBERT
+import spacy 
 import mysql.connector
 from mysql.connector import Error
 from difflib import SequenceMatcher
@@ -20,7 +21,8 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 
-kw_model = KeyBERT(model='all-MiniLM-L6-v2')
+nlp = spacy.load("en_core_web_sm")
+kw_model = KeyBERT(model=nlp)
 
 TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
 TOGETHER_API_KEY = os.getenv("API_KEY")

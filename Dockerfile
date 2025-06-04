@@ -1,22 +1,21 @@
-# Use a lightweight Python base image
+# Use a lightweight Python image
 FROM python:3.10-slim
-
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
 
 # Set working directory
 WORKDIR /app
 
-# Copy all files into the container
-COPY . /app/
+# Copy requirements and install only essentials
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Install dependencies
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+# Download spaCy English model
+RUN python -m spacy download en_core_web_sm
 
-# Set port for Flask to run on
-ENV PORT 8080
+# Copy the rest of the app
+COPY . .
 
-# Start the Flask app
+# Expose the port
+EXPOSE 8080
+
+# Start the app
 CMD ["python", "backend/app.py"]

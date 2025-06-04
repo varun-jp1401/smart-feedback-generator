@@ -1,10 +1,8 @@
-flask
+Flask
 flask-cors
-pymysql
 requests
-python-dotenv
 pandas
-scikit-learn
-sentence-transformers
 keybert
+spacy
 mysql-connector-python
+python-dotenv
