@@ -17,7 +17,7 @@ load_dotenv()
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 
 nlp = spacy.load("en_core_web_sm")
@@ -540,21 +540,24 @@ def get_questions():
         if 'conn' in locals(): 
             conn.close()
 
-@app.route('/styles/<path:filename>')
-def serve_styles(filename):
-    return send_from_directory(os.path.join('../frontend/styles'), filename)
-
-@app.route('/images/<path:filename>')
-def serve_images(filename):
-    return send_from_directory(os.path.join('../frontend/images'), filename)
-
-@app.route('/login.html')
+# Serve main frontend pages
+@app.route("/")
+@app.route("/login")
 def serve_login():
-    return send_from_directory('../frontend', 'login.html')
+    return app.send_static_file("login.html")
 
-@app.route('/register.html')
+@app.route("/register")
 def serve_register():
-    return send_from_directory('../frontend', 'register.html')
+    return app.send_static_file("register.html")
+
+@app.route("/question")
+def serve_question():
+    return app.send_static_file("question.html")
+
+# Serve static files (CSS, JS, etc.)
+@app.route("/<path:path>")
+def static_proxy(path):
+    return send_from_directory(app.static_folder, path)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
