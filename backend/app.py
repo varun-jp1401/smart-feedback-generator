@@ -6,7 +6,6 @@ import requests
 import time
 import random
 import pandas as pd
-from keybert import KeyBERT
 import spacy 
 import mysql.connector
 from mysql.connector import Error
@@ -22,7 +21,6 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 
 nlp = spacy.load("en_core_web_sm")
-kw_model = KeyBERT(model=nlp)
 
 TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
 TOGETHER_API_KEY = os.getenv("API_KEY")
@@ -48,8 +46,9 @@ def clean_response(text):
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 def extract_keywords(text, top_k=5):
-    keywords = kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 2), stop_words='english', top_n=top_k)
-    return [kw[0].lower() for kw in keywords]
+    doc = nlp(text)
+    keywords = list(set([chunk.text.lower() for chunk in doc.noun_chunks if len(chunk.text.strip()) > 2]))
+    return keywords[:top_k]
 
 def find_missing_keywords(keywords, student_answer):
     student_answer = student_answer.lower()

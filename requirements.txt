@@ -2,7 +2,6 @@ Flask
 flask-cors
 requests
 pandas
-keybert
 spacy
 mysql-connector-python
 python-dotenv
