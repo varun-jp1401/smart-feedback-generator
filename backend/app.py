@@ -17,7 +17,8 @@ load_dotenv()
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_folder='frontend', static_url_path='')
+
 CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 
 nlp = spacy.load("en_core_web_sm")
