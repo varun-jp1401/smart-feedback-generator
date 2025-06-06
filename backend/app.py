@@ -50,7 +50,8 @@ DB_CONFIG = {
     'password': os.getenv("DB_PASSWORD"),
     'database': os.getenv("DB_NAME"),
     'port': int(os.getenv("DB_PORT", 3306)),
-    'charset': 'utf8'
+    'charset': 'utf8mb4',  # Changed to utf8mb4 for better compatibility
+    'autocommit': True
 }
 
 print("=== Environment Check ===")
@@ -59,6 +60,9 @@ print(f"FRONTEND_DIR: {FRONTEND_DIR}")
 print(f"Frontend exists: {os.path.exists(FRONTEND_DIR)}")
 print(f"API_KEY set: {'Yes' if TOGETHER_API_KEY else 'No'}")
 print(f"DB_HOST set: {'Yes' if os.getenv('DB_HOST') else 'No'}")
+print(f"DB_USER: {os.getenv('DB_USER')}")
+print(f"DB_NAME: {os.getenv('DB_NAME')}")
+print(f"DB_PORT: {os.getenv('DB_PORT')}")
 
 if os.path.exists(FRONTEND_DIR):
     frontend_files = os.listdir(FRONTEND_DIR)
@@ -67,14 +71,59 @@ else:
     print("❌ Frontend directory not found")
 
 def get_db_connection():
+    """Get database connection with better error handling"""
     try:
-        return mysql.connector.connect(**DB_CONFIG)
+        print("Attempting to connect to database...")
+        conn = mysql.connector.connect(**DB_CONFIG)
+        print("✓ Database connection successful")
+        return conn
     except Error as e:
-        print(f"Database connection error: {e}")
+        print(f"❌ Database connection error: {e}")
+        print(f"Connection details: {DB_CONFIG['host']}:{DB_CONFIG['port']} as {DB_CONFIG['user']}")
         raise
 
-# ... (keep all your existing utility functions exactly as they are) ...
+def init_database():
+    """Initialize database tables"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create users table if it doesn't exist
+        create_users_table = """
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            grade INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """
+        
+        cursor.execute(create_users_table)
+        conn.commit()
+        print("✓ Database tables initialized successfully")
+        
+        # Check if table exists and show structure
+        cursor.execute("SHOW TABLES;")
+        tables = cursor.fetchall()
+        print(f"Available tables: {tables}")
+        
+        cursor.execute("DESCRIBE users;")
+        columns = cursor.fetchall()
+        print(f"Users table structure: {columns}")
+        
+    except Error as e:
+        print(f"❌ Database initialization error: {e}")
+    finally:
+        if 'cursor' in locals(): 
+            cursor.close()
+        if 'conn' in locals(): 
+            conn.close()
 
+# Initialize database on startup
+init_database()
+
+# Keep all your existing utility functions exactly as they are
 def clean_response(text):
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
@@ -212,27 +261,6 @@ def calculate_question_score(ideal_answer, student_answer):
     total_score = keyword_score + spelling_score
     return round(total_score, 1)  
 
-def calculate_question_score_simple(ideal_answer, student_answer):
-    """Simplified scoring function for testing"""
-    if not student_answer or student_answer.strip().lower() in ["i don't know", "dont know", "no idea", ""]:
-        return 0.0
-    
-    ideal_clean = ideal_answer.strip().lower()
-    student_clean = student_answer.strip().lower()
-    
-    similarity = SequenceMatcher(None, ideal_clean, student_clean).ratio()
-    
-    if similarity >= 0.95:  
-        return 2.0
-    elif similarity >= 0.8: 
-        return 1.5
-    elif similarity >= 0.6:  
-        return 1.0
-    elif similarity >= 0.4:  
-        return 0.5
-    else:
-        return 0.0
-
 def build_prompt(question, ideal_answer, student_answer, missing_keywords):
     hint = ""
     if missing_keywords:
@@ -278,14 +306,38 @@ def generate_feedback(question, ideal_answer, student_answer):
     except Exception as e:
         return f"Error generating feedback: {str(e)}"
 
+def get_letter_grade(percentage):
+    """Convert percentage to letter grade"""
+    if percentage >= 90:
+        return "A+"
+    elif percentage >= 80:
+        return "A"
+    elif percentage >= 70:
+        return "B"
+    elif percentage >= 60:
+        return "C"
+    elif percentage >= 50:
+        return "D"
+    else:
+        return "F"
+
 # Health check endpoint
 @app.route("/health", methods=["GET"])
 def health_check():
+    try:
+        # Test database connection
+        conn = get_db_connection()
+        conn.close()
+        db_status = "connected"
+    except:
+        db_status = "disconnected"
+    
     return jsonify({
         "status": "healthy",
         "frontend_available": os.path.exists(FRONTEND_DIR),
         "api_key_configured": bool(TOGETHER_API_KEY),
-        "db_configured": bool(os.getenv("DB_HOST"))
+        "db_configured": bool(os.getenv("DB_HOST")),
+        "db_status": db_status
     })
 
 @app.route("/generate-feedback", methods=["POST"])
@@ -356,64 +408,94 @@ def calculate_score():
         "debug_info": debug_info  
     })
 
-def get_letter_grade(percentage):
-    """Convert percentage to letter grade"""
-    if percentage >= 90:
-        return "A+"
-    elif percentage >= 80:
-        return "A"
-    elif percentage >= 70:
-        return "B"
-    elif percentage >= 60:
-        return "C"
-    elif percentage >= 50:
-        return "D"
-    else:
-        return "F"
-
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-    grade = data.get("grade")
-
     try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+            
+        username = data.get("username")
+        password = data.get("password")
+        grade = data.get("grade")
+
+        print(f"Registration attempt: username={username}, grade={grade}")
+
+        if not all([username, password, grade]):
+            return jsonify({"error": "Missing required fields: username, password, or grade"}), 400
+
+        # Validate grade
+        try:
+            grade = int(grade)
+            if not (1 <= grade <= 12):
+                return jsonify({"error": "Grade must be between 1 and 12"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "Grade must be a valid number"}), 400
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+        
+        # Check if username already exists
+        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
         if cursor.fetchone():
             return jsonify({"error": "Username already exists."}), 400
 
-        cursor.execute("INSERT INTO users (username, password, grade) VALUES (%s, %s, %s)", (username, password, grade))
+        # Insert new user
+        cursor.execute(
+            "INSERT INTO users (username, password, grade) VALUES (%s, %s, %s)", 
+            (username, password, grade)
+        )
         conn.commit()
+        print(f"✓ User {username} registered successfully")
+        
         return jsonify({"message": "User registered successfully!"})
+        
     except Error as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ Database error during registration: {e}")
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"❌ Unexpected error during registration: {e}")
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
     finally:
-        cursor.close()
-        conn.close()
+        if 'cursor' in locals(): 
+            cursor.close()
+        if 'conn' in locals(): 
+            conn.close()
 
 @app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-
     try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+            
+        username = data.get("username")
+        password = data.get("password")
+
+        if not all([username, password]):
+            return jsonify({"error": "Missing username or password"}), 400
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT grade FROM users WHERE username=%s AND password=%s", (username, password))
         result = cursor.fetchone()
+        
         if result:
             return jsonify({"message": "Login successful!", "grade": result[0]})
         else:
             return jsonify({"error": "Invalid username or password"}), 401
+            
     except Error as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ Database error during login: {e}")
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"❌ Unexpected error during login: {e}")
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if 'cursor' in locals(): 
+            cursor.close()
+        if 'conn' in locals(): 
+            conn.close()
 
 @app.route("/get-questions", methods=["POST"])
 def get_questions():
