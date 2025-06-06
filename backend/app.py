@@ -7,10 +7,9 @@ import time
 import random
 import pandas as pd
 import spacy 
-import mysql.connector
+from replit import db
 from mysql.connector import Error
 from difflib import SequenceMatcher
-import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -19,7 +18,7 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__, static_folder='frontend', static_url_path='')
 
-CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
+CORS(app)
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -31,16 +30,6 @@ HEADERS = {
     "Authorization": f"Bearer {TOGETHER_API_KEY}",
     "Content-Type": "application/json"
 }
-
-def get_db_connection():
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        database=os.getenv("DB_NAME"),
-        port=int(os.getenv("DB_PORT", 3306)),
-        charset='utf8'
-    )
 
 
 def clean_response(text):
@@ -357,21 +346,15 @@ def register():
     password = data.get("password")
     grade = data.get("grade")
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-        if cursor.fetchone():
-            return jsonify({"error": "Username already exists."}), 400
+    if f"user:{username}" in db:
+        return jsonify({"error": "Username already exists."}), 400
 
-        cursor.execute("INSERT INTO users (username, password, grade) VALUES (%s, %s, %s)", (username, password, grade))
-        conn.commit()
-        return jsonify({"message": "User registered successfully!"})
-    except Error as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+    db[f"user:{username}"] = {
+        "password": password,
+        "grade": grade
+    }
+    return jsonify({"message": "User registered successfully!"})
+
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -379,20 +362,11 @@ def login():
     username = data.get("username")
     password = data.get("password")
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT grade FROM users WHERE username=%s AND password=%s", (username, password))
-        result = cursor.fetchone()
-        if result:
-            return jsonify({"message": "Login successful!", "grade": result[0]})
-        else:
-            return jsonify({"error": "Invalid username or password"}), 401
-    except Error as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+    user = db.get(f"user:{username}")
+    if user and user["password"] == password:
+        return jsonify({"message": "Login successful!", "grade": user["grade"]})
+    else:
+        return jsonify({"error": "Invalid username or password"}), 401
 
 
 @app.route("/get-questions", methods=["POST"])
@@ -402,144 +376,44 @@ def get_questions():
     if not username:
         return jsonify({"error": "Username is required"}), 400
 
+    # Get grade from Replit DB
+    user = db.get(f"user:{username}")
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    grade = user.get("grade")
+    if not grade:
+        return jsonify({"error": "User does not have a grade set"}), 400
+
+    # Try to locate the CSV file for this grade
+    file_path = f"data/grade{grade}_v2.csv"
+    if not os.path.exists(file_path):
+        return jsonify({"error": f"Data file not found for grade {grade}"}), 500
+
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT grade FROM users WHERE username = %s", (username,))
-        result = cursor.fetchone()
-        if not result:
-            return jsonify({"error": "User not found"}), 404
-
-        grade = result[0]
-        
-        possible_paths = [
-            
-            os.path.join(os.path.dirname(BASE_DIR), "data", f"grade{grade}_v2.csv"),
-            
-            os.path.join(BASE_DIR, "data", f"grade{grade}_v2.csv"),
-            
-            os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "data", f"grade{grade}_v2.csv"),
-            
-            os.path.join(os.path.dirname(BASE_DIR), "data", f"grade{grade}_v2"),
-        ]
-        
-        file_path = None
-        for path in possible_paths:
-            print(f"Trying path: {path}")
-            if os.path.exists(path):
-                file_path = path
-                print(f"✓ Found file at: {path}")
-                break
-        
-        if not file_path:
-            print(f"BASE_DIR: {BASE_DIR}")
-            print(f"Looking for grade: {grade}")
-            
-            data_dirs_to_check = [
-                os.path.join(os.path.dirname(BASE_DIR), "data"),
-                os.path.join(BASE_DIR, "data"),
-                os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "data")
-            ]
-            
-            for data_dir in data_dirs_to_check:
-                if os.path.exists(data_dir):
-                    available_files = os.listdir(data_dir)
-                    print(f"Files in {data_dir}: {available_files}")
-                    return jsonify({
-                        "error": f"Question file not found for grade {grade}. Available files in {data_dir}: {available_files}"
-                    }), 500
-            
-            return jsonify({"error": f"No data directory found. Searched paths: {data_dirs_to_check}"}), 500
-
-       
-        try:
-            df = pd.read_csv(file_path)
-        except Exception as csv_error:
-            print(f"Error reading CSV: {csv_error}")
-            return jsonify({"error": f"Error reading CSV file: {str(csv_error)}"}), 500
-        
-        
-        required_columns = ["Difficulty", "Question", "Answer"]
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            available_columns = list(df.columns)
-            print(f"Available columns: {available_columns}")
-            return jsonify({
-                "error": f"Missing columns in CSV: {missing_columns}. Available columns: {available_columns}"
-            }), 500
-
-        
-        difficulty_counts = df['Difficulty'].value_counts().to_dict()
-        print(f"Question counts by difficulty: {difficulty_counts}")
-
-        
-        def sample_questions(level, n):
-            level_questions = df[df["Difficulty"] == level]
-            available_count = len(level_questions)
-            
-            if available_count == 0:
-                print(f"Warning: No {level} questions available")
-                return []
-            
-            
-            sample_size = min(n, available_count)
-            if available_count < n:
-                print(f"Warning: Only {available_count} {level} questions available, requested {n}")
-            
-            return level_questions.sample(sample_size, replace=False).to_dict(orient="records")
-
-        
-        easy = sample_questions("Easy", 2)
-        medium = sample_questions("Medium", 2)
-        difficult = sample_questions("Difficult", 1)
-
-       
-        selected = easy + medium + difficult
-        
-        
-        seen_questions = set()
-        unique_selected = []
-        for q in selected:
-            if q["Question"] not in seen_questions:
-                seen_questions.add(q["Question"])
-                unique_selected.append(q)
-        
-        
-        if len(unique_selected) < 5:
-            
-            used_questions = {q["Question"] for q in unique_selected}
-            remaining_questions = df[~df["Question"].isin(used_questions)]
-            
-            needed = 5 - len(unique_selected)
-            if len(remaining_questions) >= needed:
-                additional = remaining_questions.sample(needed).to_dict(orient="records")
-                unique_selected.extend(additional)
-
-        
-        if len(unique_selected) == 0:
-            return jsonify({"error": "No questions found"}), 500
-
-        
-        random.shuffle(unique_selected)
-
-        print(f"Successfully loaded {len(unique_selected)} unique questions")
-        
-        
-        question_titles = [q["Question"][:50] + "..." if len(q["Question"]) > 50 else q["Question"] for q in unique_selected]
-        print(f"Selected questions: {question_titles}")
-        
-        return jsonify({"questions": unique_selected})
-
+        df = pd.read_csv(file_path)
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error in get_questions: {error_details}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-    finally:
-        if 'cursor' in locals(): 
-            cursor.close()
-        if 'conn' in locals(): 
-            conn.close()
+        return jsonify({"error": f"Error reading CSV: {str(e)}"}), 500
+
+    required_columns = ["Difficulty", "Question", "Answer"]
+    if not all(col in df.columns for col in required_columns):
+        return jsonify({"error": "CSV file is missing required columns"}), 500
+
+    def sample_questions(level, n):
+        level_df = df[df["Difficulty"] == level]
+        if level_df.empty:
+            return []
+        return level_df.sample(min(n, len(level_df))).to_dict(orient="records")
+
+    easy = sample_questions("Easy", 2)
+    medium = sample_questions("Medium", 2)
+    difficult = sample_questions("Difficult", 1)
+
+    selected = easy + medium + difficult
+    random.shuffle(selected)
+
+    return jsonify({"questions": selected})
+
 
 # Serve main frontend pages
 @app.route("/")
@@ -561,5 +435,4 @@ def static_proxy(path):
     return send_from_directory(app.static_folder, path)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=3000)
