@@ -12,27 +12,28 @@ from mysql.connector import Error
 from difflib import SequenceMatcher
 import os
 from dotenv import load_dotenv
-
-# Load environment variables
 load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
 
-app = Flask(__name__, static_folder='frontend', static_url_path='')
+# Create Flask app with proper static folder configuration
+app = Flask(__name__, 
+           static_folder=FRONTEND_DIR if os.path.exists(FRONTEND_DIR) else None,
+           static_url_path='')
 
-# Allow CORS from anywhere in production, or specify your domain
+# Enable CORS for all routes
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Load spaCy model
 try:
     nlp = spacy.load("en_core_web_sm")
-except OSError:
-    print("spaCy model not found, downloading...")
-    import subprocess
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
+    print("✓ spaCy model loaded successfully")
+except Exception as e:
+    print(f"❌ Error loading spaCy model: {e}")
+    nlp = None
 
-# API configuration
+# API Configuration
 TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
 TOGETHER_API_KEY = os.getenv("API_KEY")
 MODEL_NAME = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
@@ -42,28 +43,93 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
+# Database configuration
+DB_CONFIG = {
+    'host': os.getenv("DB_HOST"),
+    'user': os.getenv("DB_USER"),
+    'password': os.getenv("DB_PASSWORD"),
+    'database': os.getenv("DB_NAME"),
+    'port': int(os.getenv("DB_PORT", 3306)),
+    'charset': 'utf8mb4',  # Changed to utf8mb4 for better compatibility
+    'autocommit': True
+}
+
+print("=== Environment Check ===")
+print(f"BASE_DIR: {BASE_DIR}")
+print(f"FRONTEND_DIR: {FRONTEND_DIR}")
+print(f"Frontend exists: {os.path.exists(FRONTEND_DIR)}")
+print(f"API_KEY set: {'Yes' if TOGETHER_API_KEY else 'No'}")
+print(f"DB_HOST set: {'Yes' if os.getenv('DB_HOST') else 'No'}")
+print(f"DB_USER: {os.getenv('DB_USER')}")
+print(f"DB_NAME: {os.getenv('DB_NAME')}")
+print(f"DB_PORT: {os.getenv('DB_PORT')}")
+
+if os.path.exists(FRONTEND_DIR):
+    frontend_files = os.listdir(FRONTEND_DIR)
+    print(f"Frontend files: {frontend_files}")
+else:
+    print("❌ Frontend directory not found")
+
 def get_db_connection():
-    """Get database connection using Railway environment variables"""
+    """Get database connection with better error handling"""
     try:
-        # Railway MySQL environment variables
-        connection = mysql.connector.connect(
-            host=os.getenv("MYSQL_HOST") or os.getenv("DB_HOST"),
-            user=os.getenv("MYSQL_USER") or os.getenv("DB_USER"), 
-            password=os.getenv("MYSQL_PASSWORD") or os.getenv("DB_PASSWORD"),
-            database=os.getenv("MYSQL_DATABASE") or os.getenv("DB_NAME"),
-            port=int(os.getenv("MYSQL_PORT", os.getenv("DB_PORT", 3306))),
-            charset='utf8mb4',
-            autocommit=True
-        )
-        return connection
+        print("Attempting to connect to database...")
+        conn = mysql.connector.connect(**DB_CONFIG)
+        print("✓ Database connection successful")
+        return conn
     except Error as e:
-        print(f"Database connection error: {e}")
+        print(f"❌ Database connection error: {e}")
+        print(f"Connection details: {DB_CONFIG['host']}:{DB_CONFIG['port']} as {DB_CONFIG['user']}")
         raise
 
+def init_database():
+    """Initialize database tables"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create users table if it doesn't exist
+        create_users_table = """
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            grade INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """
+        
+        cursor.execute(create_users_table)
+        conn.commit()
+        print("✓ Database tables initialized successfully")
+        
+        # Check if table exists and show structure
+        cursor.execute("SHOW TABLES;")
+        tables = cursor.fetchall()
+        print(f"Available tables: {tables}")
+        
+        cursor.execute("DESCRIBE users;")
+        columns = cursor.fetchall()
+        print(f"Users table structure: {columns}")
+        
+    except Error as e:
+        print(f"❌ Database initialization error: {e}")
+    finally:
+        if 'cursor' in locals(): 
+            cursor.close()
+        if 'conn' in locals(): 
+            conn.close()
+
+# Initialize database on startup
+init_database()
+
+# Keep all your existing utility functions exactly as they are
 def clean_response(text):
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 def extract_keywords(text, top_k=5):
+    if not nlp:
+        return text.split()[:top_k]  # Fallback if spaCy not loaded
     doc = nlp(text)
     keywords = list(set([chunk.text.lower() for chunk in doc.noun_chunks if len(chunk.text.strip()) > 2]))
     return keywords[:top_k]
@@ -195,27 +261,6 @@ def calculate_question_score(ideal_answer, student_answer):
     total_score = keyword_score + spelling_score
     return round(total_score, 1)  
 
-def calculate_question_score_simple(ideal_answer, student_answer):
-    """Simplified scoring function for testing"""
-    if not student_answer or student_answer.strip().lower() in ["i don't know", "dont know", "no idea", ""]:
-        return 0.0
-    
-    ideal_clean = ideal_answer.strip().lower()
-    student_clean = student_answer.strip().lower()
-    
-    similarity = SequenceMatcher(None, ideal_clean, student_clean).ratio()
-    
-    if similarity >= 0.95:  
-        return 2.0
-    elif similarity >= 0.8: 
-        return 1.5
-    elif similarity >= 0.6:  
-        return 1.0
-    elif similarity >= 0.4:  
-        return 0.5
-    else:
-        return 0.0
-
 def build_prompt(question, ideal_answer, student_answer, missing_keywords):
     hint = ""
     if missing_keywords:
@@ -261,24 +306,38 @@ def generate_feedback(question, ideal_answer, student_answer):
     except Exception as e:
         return f"Error generating feedback: {str(e)}"
 
-# Health check endpoint for Railway
-@app.route("/health")
-def health_check():
-    return jsonify({"status": "healthy", "message": "Smart Feedback Generator is running"})
+def get_letter_grade(percentage):
+    """Convert percentage to letter grade"""
+    if percentage >= 90:
+        return "A+"
+    elif percentage >= 80:
+        return "A"
+    elif percentage >= 70:
+        return "B"
+    elif percentage >= 60:
+        return "C"
+    elif percentage >= 50:
+        return "D"
+    else:
+        return "F"
 
-# Add root route for testing
-@app.route("/")
-def home():
+# Health check endpoint
+@app.route("/health", methods=["GET"])
+def health_check():
+    try:
+        # Test database connection
+        conn = get_db_connection()
+        conn.close()
+        db_status = "connected"
+    except:
+        db_status = "disconnected"
+    
     return jsonify({
-        "message": "Smart Feedback Generator API is running!",
-        "endpoints": [
-            "/health",
-            "/generate-feedback",
-            "/calculate-score",
-            "/register",
-            "/login",
-            "/get-questions"
-        ]
+        "status": "healthy",
+        "frontend_available": os.path.exists(FRONTEND_DIR),
+        "api_key_configured": bool(TOGETHER_API_KEY),
+        "db_configured": bool(os.getenv("DB_HOST")),
+        "db_status": db_status
     })
 
 @app.route("/generate-feedback", methods=["POST"])
@@ -308,7 +367,6 @@ def calculate_score():
     
     total_score = 0
     question_scores = []
-    
     debug_info = []
     
     for i, (question_obj, student_answer) in enumerate(zip(questions, answers)):
@@ -350,63 +408,89 @@ def calculate_score():
         "debug_info": debug_info  
     })
 
-def get_letter_grade(percentage):
-    """Convert percentage to letter grade"""
-    if percentage >= 90:
-        return "A+"
-    elif percentage >= 80:
-        return "A"
-    elif percentage >= 70:
-        return "B"
-    elif percentage >= 60:
-        return "C"
-    elif percentage >= 50:
-        return "D"
-    else:
-        return "F"
-
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-    grade = data.get("grade")
-
     try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+            
+        username = data.get("username")
+        password = data.get("password")
+        grade = data.get("grade")
+
+        print(f"Registration attempt: username={username}, grade={grade}")
+
+        if not all([username, password, grade]):
+            return jsonify({"error": "Missing required fields: username, password, or grade"}), 400
+
+        # Validate grade
+        try:
+            grade = int(grade)
+            if not (1 <= grade <= 12):
+                return jsonify({"error": "Grade must be between 1 and 12"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "Grade must be a valid number"}), 400
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+        
+        # Check if username already exists
+        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
         if cursor.fetchone():
             return jsonify({"error": "Username already exists."}), 400
 
-        cursor.execute("INSERT INTO users (username, password, grade) VALUES (%s, %s, %s)", (username, password, grade))
+        # Insert new user
+        cursor.execute(
+            "INSERT INTO users (username, password, grade) VALUES (%s, %s, %s)", 
+            (username, password, grade)
+        )
         conn.commit()
+        print(f"✓ User {username} registered successfully")
+        
         return jsonify({"message": "User registered successfully!"})
+        
     except Error as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ Database error during registration: {e}")
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"❌ Unexpected error during registration: {e}")
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
     finally:
-        if 'cursor' in locals():
+        if 'cursor' in locals(): 
             cursor.close()
-        if 'conn' in locals():
+        if 'conn' in locals(): 
             conn.close()
 
 @app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-
     try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+            
+        username = data.get("username")
+        password = data.get("password")
+
+        if not all([username, password]):
+            return jsonify({"error": "Missing username or password"}), 400
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT grade FROM users WHERE username=%s AND password=%s", (username, password))
         result = cursor.fetchone()
+        
         if result:
             return jsonify({"message": "Login successful!", "grade": result[0]})
         else:
             return jsonify({"error": "Invalid username or password"}), 401
+            
     except Error as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ Database error during login: {e}")
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"❌ Unexpected error during login: {e}")
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
     finally:
         if 'cursor' in locals(): 
             cursor.close()
@@ -430,14 +514,12 @@ def get_questions():
 
         grade = result[0]
         
-        # Improved file path resolution for Railway deployment
+        # Updated paths for Railway deployment
         possible_paths = [
             os.path.join(BASE_DIR, "data", f"grade{grade}_v2.csv"),
-            os.path.join(os.path.dirname(__file__), "data", f"grade{grade}_v2.csv"),
-            os.path.join(os.getcwd(), "data", f"grade{grade}_v2.csv"),
-            f"./data/grade{grade}_v2.csv",
-            f"data/grade{grade}_v2.csv",
-            f"grade{grade}_v2.csv"
+            os.path.join(os.path.dirname(BASE_DIR), "data", f"grade{grade}_v2.csv"),
+            os.path.join("/app", "data", f"grade{grade}_v2.csv"),
+            os.path.join("/app/backend", "data", f"grade{grade}_v2.csv"),
         ]
         
         file_path = None
@@ -450,18 +532,24 @@ def get_questions():
         
         if not file_path:
             print(f"BASE_DIR: {BASE_DIR}")
-            print(f"Current working directory: {os.getcwd()}")
-            print(f"Files in current directory: {os.listdir('.')}")
+            print(f"Looking for grade: {grade}")
             
-            # Check if data directory exists
-            if os.path.exists('data'):
-                print(f"Files in data directory: {os.listdir('data')}")
-            else:
-                print("Data directory does not exist")
+            data_dirs_to_check = [
+                os.path.join(BASE_DIR, "data"),
+                os.path.join(os.path.dirname(BASE_DIR), "data"),
+                os.path.join("/app", "data"),
+                os.path.join("/app/backend", "data")
+            ]
             
-            return jsonify({
-                "error": f"Question file not found for grade {grade}. Searched paths: {possible_paths}"
-            }), 500
+            for data_dir in data_dirs_to_check:
+                if os.path.exists(data_dir):
+                    available_files = os.listdir(data_dir)
+                    print(f"Files in {data_dir}: {available_files}")
+                    return jsonify({
+                        "error": f"Question file not found for grade {grade}. Available files in {data_dir}: {available_files}"
+                    }), 500
+            
+            return jsonify({"error": f"No data directory found. Searched paths: {data_dirs_to_check}"}), 500
 
         try:
             df = pd.read_csv(file_path)
@@ -541,27 +629,54 @@ def get_questions():
             conn.close()
 
 # Serve main frontend pages
-@app.route("/login-page")
+@app.route("/")
+def serve_root():
+    if os.path.exists(FRONTEND_DIR):
+        try:
+            return send_from_directory(FRONTEND_DIR, "login.html")
+        except:
+            pass
+    return jsonify({"message": "Smart Feedback Generator API", "status": "running"})
+
+@app.route("/login")
 def serve_login():
-    return app.send_static_file("login.html")
+    if os.path.exists(FRONTEND_DIR):
+        try:
+            return send_from_directory(FRONTEND_DIR, "login.html")
+        except:
+            pass
+    return jsonify({"error": "Frontend not available"})
 
-@app.route("/register-page")
+@app.route("/register")
 def serve_register():
-    return app.send_static_file("register.html")
+    if os.path.exists(FRONTEND_DIR):
+        try:
+            return send_from_directory(FRONTEND_DIR, "register.html")
+        except:
+            pass
+    return jsonify({"error": "Frontend not available"})
 
-@app.route("/question-page")
+@app.route("/question")
 def serve_question():
-    return app.send_static_file("question.html")
+    if os.path.exists(FRONTEND_DIR):
+        try:
+            return send_from_directory(FRONTEND_DIR, "question.html")
+        except:
+            pass
+    return jsonify({"error": "Frontend not available"})
 
 # Serve static files (CSS, JS, etc.)
-@app.route("/<path:path>")
-def static_proxy(path):
-    try:
-        return send_from_directory(app.static_folder, path)
-    except:
-        return jsonify({"error": "File not found"}), 404
+@app.route("/<path:filename>")
+def static_proxy(filename):
+    if os.path.exists(FRONTEND_DIR):
+        try:
+            return send_from_directory(FRONTEND_DIR, filename)
+        except:
+            pass
+    return jsonify({"error": f"File {filename} not found"}), 404
 
 if __name__ == "__main__":
-    # Use Railway's PORT environment variable
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
+    print(f"Starting server on port {port}")
+    print(f"Environment: {os.environ.get('RAILWAY_ENVIRONMENT', 'local')}")
     app.run(host="0.0.0.0", port=port, debug=False)
