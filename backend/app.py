@@ -12,27 +12,17 @@ from mysql.connector import Error
 from difflib import SequenceMatcher
 import os
 from dotenv import load_dotenv
-
-# Load environment variables
 load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__, static_folder='frontend', static_url_path='')
 
-# Allow CORS from anywhere in production, or specify your domain
+# Update CORS to allow Railway domain and remove specific localhost restriction
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Load spaCy model
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    print("spaCy model not found, downloading...")
-    import subprocess
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_sm")
 
-# API configuration
 TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
 TOGETHER_API_KEY = os.getenv("API_KEY")
 MODEL_NAME = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
@@ -43,22 +33,15 @@ HEADERS = {
 }
 
 def get_db_connection():
-    """Get database connection using Railway environment variables"""
-    try:
-        # Railway MySQL environment variables
-        connection = mysql.connector.connect(
-            host=os.getenv("MYSQL_HOST") or os.getenv("DB_HOST"),
-            user=os.getenv("MYSQL_USER") or os.getenv("DB_USER"), 
-            password=os.getenv("MYSQL_PASSWORD") or os.getenv("DB_PASSWORD"),
-            database=os.getenv("MYSQL_DATABASE") or os.getenv("DB_NAME"),
-            port=int(os.getenv("MYSQL_PORT", os.getenv("DB_PORT", 3306))),
-            charset='utf8mb4',
-            autocommit=True
-        )
-        return connection
-    except Error as e:
-        print(f"Database connection error: {e}")
-        raise
+    return mysql.connector.connect(
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+        port=int(os.getenv("DB_PORT", 3306)),
+        charset='utf8'
+    )
+
 
 def clean_response(text):
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
@@ -81,8 +64,10 @@ def calculate_keyword_score(ideal_answer, student_answer):
     student_answer_lower = student_answer.lower()
     ideal_answer_lower = ideal_answer.lower()
     
+   
     if student_answer_lower.strip() == ideal_answer_lower.strip():
         return 1.0
+    
     
     similarity = SequenceMatcher(None, ideal_answer_lower, student_answer_lower).ratio()
     if similarity >= 0.8:  
@@ -91,16 +76,20 @@ def calculate_keyword_score(ideal_answer, student_answer):
     matched_keywords = 0
     
     for keyword in keywords:
+       
         if keyword in student_answer_lower:
             matched_keywords += 1
             continue
             
+        
         keyword_words = keyword.split()
         if len(keyword_words) > 1:
+            
             found_words = sum(1 for word in keyword_words if word in student_answer_lower)
             if found_words >= len(keyword_words) * 0.7:  
                 matched_keywords += 1
         else:
+          
             student_words = student_answer_lower.split()
             for student_word in student_words:
                 word_similarity = SequenceMatcher(None, keyword, student_word).ratio()
@@ -110,6 +99,7 @@ def calculate_keyword_score(ideal_answer, student_answer):
     
     coverage_ratio = matched_keywords / len(keywords)
     
+
     if coverage_ratio >= 0.6: 
         return 1.0
     elif coverage_ratio >= 0.3:  
@@ -119,6 +109,7 @@ def calculate_keyword_score(ideal_answer, student_answer):
 
 def calculate_spelling_score(ideal_answer, student_answer):
     """Calculate score based on spelling accuracy (0-1 marks)"""
+   
     keywords = extract_keywords(ideal_answer, top_k=10)
     if not keywords:
         return 1.0  
@@ -126,8 +117,10 @@ def calculate_spelling_score(ideal_answer, student_answer):
     student_answer_lower = student_answer.lower()
     ideal_answer_lower = ideal_answer.lower()
     
+  
     if student_answer_lower.strip() == ideal_answer_lower.strip():
         return 1.0
+    
     
     similarity = SequenceMatcher(None, ideal_answer_lower, student_answer_lower).ratio()
     if similarity >= 0.85:  
@@ -145,8 +138,10 @@ def calculate_spelling_score(ideal_answer, student_answer):
                 
             total_important_words += 1
             
+            
             if word in student_words:
                 continue
+            
             
             best_similarity = 0
             for student_word in student_words:
@@ -155,6 +150,7 @@ def calculate_spelling_score(ideal_answer, student_answer):
                 similarity = SequenceMatcher(None, word, student_word).ratio()
                 best_similarity = max(best_similarity, similarity)
             
+          
             if best_similarity < 0.75:  
                 spelling_errors += 1
     
@@ -163,6 +159,7 @@ def calculate_spelling_score(ideal_answer, student_answer):
     
     error_ratio = spelling_errors / total_important_words
     
+   
     if error_ratio <= 0.15:  
         return 1.0
     elif error_ratio <= 0.4:  
@@ -172,15 +169,18 @@ def calculate_spelling_score(ideal_answer, student_answer):
 
 def calculate_question_score(ideal_answer, student_answer):
     """Calculate total score for a question (0-2 marks)"""
+   
     if not student_answer or student_answer.strip().lower() in ["i don't know", "dont know", "no idea", ""]:
         return 0.0
     
     ideal_clean = ideal_answer.strip().lower()
     student_clean = student_answer.strip().lower()
     
+    
     if ideal_clean == student_clean:
         return 2.0
     
+   
     overall_similarity = SequenceMatcher(None, ideal_clean, student_clean).ratio()
     if overall_similarity >= 0.9: 
         return 2.0
@@ -189,19 +189,23 @@ def calculate_question_score(ideal_answer, student_answer):
     elif overall_similarity >= 0.7:  
         return 1.5
     
+    
     keyword_score = calculate_keyword_score(ideal_answer, student_answer)
     spelling_score = calculate_spelling_score(ideal_answer, student_answer)
     
     total_score = keyword_score + spelling_score
     return round(total_score, 1)  
 
+
 def calculate_question_score_simple(ideal_answer, student_answer):
     """Simplified scoring function for testing"""
     if not student_answer or student_answer.strip().lower() in ["i don't know", "dont know", "no idea", ""]:
         return 0.0
     
+   
     ideal_clean = ideal_answer.strip().lower()
     student_clean = student_answer.strip().lower()
+    
     
     similarity = SequenceMatcher(None, ideal_clean, student_clean).ratio()
     
@@ -261,11 +265,6 @@ def generate_feedback(question, ideal_answer, student_answer):
     except Exception as e:
         return f"Error generating feedback: {str(e)}"
 
-# Health check endpoint for Railway
-@app.route("/health")
-def health_check():
-    return jsonify({"status": "healthy", "message": "Smart Feedback Generator is running"})
-
 @app.route("/generate-feedback", methods=["POST"])
 def feedback_api():
     data = request.get_json()
@@ -294,6 +293,7 @@ def calculate_score():
     total_score = 0
     question_scores = []
     
+   
     debug_info = []
     
     for i, (question_obj, student_answer) in enumerate(zip(questions, answers)):
@@ -370,10 +370,8 @@ def register():
     except Error as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        if 'cursor' in locals():
-            cursor.close()
-        if 'conn' in locals():
-            conn.close()
+        cursor.close()
+        conn.close()
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -393,10 +391,9 @@ def login():
     except Error as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        if 'cursor' in locals(): 
-            cursor.close()
-        if 'conn' in locals(): 
-            conn.close()
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
 
 @app.route("/get-questions", methods=["POST"])
 def get_questions():
@@ -415,14 +412,15 @@ def get_questions():
 
         grade = result[0]
         
-        # Improved file path resolution for containerized environment
         possible_paths = [
+            # Look in parent directory's data folder (since app.py is in backend/)
+            os.path.join(os.path.dirname(BASE_DIR), "data", f"grade{grade}_v2.csv"),
+            # Look in current directory's data folder
             os.path.join(BASE_DIR, "data", f"grade{grade}_v2.csv"),
-            os.path.join("/app", "data", f"grade{grade}_v2.csv"),  # Container path
-            os.path.join(os.getcwd(), "data", f"grade{grade}_v2.csv"),
-            f"./data/grade{grade}_v2.csv",
-            f"data/grade{grade}_v2.csv",
-            f"grade{grade}_v2.csv"
+            # Look in root data folder
+            os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "data", f"grade{grade}_v2.csv"),
+            # Alternative path
+            os.path.join(os.path.dirname(BASE_DIR), "data", f"grade{grade}_v2"),
         ]
         
         file_path = None
@@ -435,22 +433,31 @@ def get_questions():
         
         if not file_path:
             print(f"BASE_DIR: {BASE_DIR}")
-            print(f"Current working directory: {os.getcwd()}")
-            print(f"Files in BASE_DIR: {os.listdir(BASE_DIR) if os.path.exists(BASE_DIR) else 'BASE_DIR does not exist'}")
+            print(f"Looking for grade: {grade}")
             
-            # Additional debugging for container environment
-            print(f"Files in /app: {os.listdir('/app') if os.path.exists('/app') else '/app does not exist'}")
-            print(f"Files in /app/data: {os.listdir('/app/data') if os.path.exists('/app/data') else '/app/data does not exist'}")
+            data_dirs_to_check = [
+                os.path.join(os.path.dirname(BASE_DIR), "data"),
+                os.path.join(BASE_DIR, "data"),
+                os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "data")
+            ]
             
-            return jsonify({
-                "error": f"Question file not found for grade {grade}. Searched paths: {possible_paths}"
-            }), 500
+            for data_dir in data_dirs_to_check:
+                if os.path.exists(data_dir):
+                    available_files = os.listdir(data_dir)
+                    print(f"Files in {data_dir}: {available_files}")
+                    return jsonify({
+                        "error": f"Question file not found for grade {grade}. Available files in {data_dir}: {available_files}"
+                    }), 500
+            
+            return jsonify({"error": f"No data directory found. Searched paths: {data_dirs_to_check}"}), 500
 
+       
         try:
             df = pd.read_csv(file_path)
         except Exception as csv_error:
             print(f"Error reading CSV: {csv_error}")
             return jsonify({"error": f"Error reading CSV file: {str(csv_error)}"}), 500
+        
         
         required_columns = ["Difficulty", "Question", "Answer"]
         missing_columns = [col for col in required_columns if col not in df.columns]
@@ -461,9 +468,11 @@ def get_questions():
                 "error": f"Missing columns in CSV: {missing_columns}. Available columns: {available_columns}"
             }), 500
 
+        
         difficulty_counts = df['Difficulty'].value_counts().to_dict()
         print(f"Question counts by difficulty: {difficulty_counts}")
 
+        
         def sample_questions(level, n):
             level_questions = df[df["Difficulty"] == level]
             available_count = len(level_questions)
@@ -472,17 +481,21 @@ def get_questions():
                 print(f"Warning: No {level} questions available")
                 return []
             
+            
             sample_size = min(n, available_count)
             if available_count < n:
                 print(f"Warning: Only {available_count} {level} questions available, requested {n}")
             
             return level_questions.sample(sample_size, replace=False).to_dict(orient="records")
 
+        
         easy = sample_questions("Easy", 2)
         medium = sample_questions("Medium", 2)
         difficult = sample_questions("Difficult", 1)
 
+       
         selected = easy + medium + difficult
+        
         
         seen_questions = set()
         unique_selected = []
@@ -491,7 +504,9 @@ def get_questions():
                 seen_questions.add(q["Question"])
                 unique_selected.append(q)
         
+        
         if len(unique_selected) < 5:
+            
             used_questions = {q["Question"] for q in unique_selected}
             remaining_questions = df[~df["Question"].isin(used_questions)]
             
@@ -500,12 +515,15 @@ def get_questions():
                 additional = remaining_questions.sample(needed).to_dict(orient="records")
                 unique_selected.extend(additional)
 
+        
         if len(unique_selected) == 0:
             return jsonify({"error": "No questions found"}), 500
 
+        
         random.shuffle(unique_selected)
 
         print(f"Successfully loaded {len(unique_selected)} unique questions")
+        
         
         question_titles = [q["Question"][:50] + "..." if len(q["Question"]) > 50 else q["Question"] for q in unique_selected]
         print(f"Selected questions: {question_titles}")
@@ -523,26 +541,77 @@ def get_questions():
         if 'conn' in locals(): 
             conn.close()
 
-# Serve main frontend pages
+# Add a health check endpoint
+@app.route("/health")
+def health_check():
+    return jsonify({"status": "healthy", "message": "Flask app is running"})
+
+# Serve main frontend pages with error handling
 @app.route("/")
+def serve_index():
+    try:
+        if os.path.exists(os.path.join(app.static_folder, "login.html")):
+            return app.send_static_file("login.html")
+        else:
+            return jsonify({"message": "Welcome to Smart Feedback Generator API", "status": "running"}), 200
+    except Exception as e:
+        return jsonify({"error": "Frontend files not found", "message": str(e)}), 404
+
 @app.route("/login")
 def serve_login():
-    return app.send_static_file("login.html")
+    try:
+        return app.send_static_file("login.html")
+    except Exception as e:
+        return jsonify({"error": "login.html not found", "message": str(e)}), 404
 
 @app.route("/register")
 def serve_register():
-    return app.send_static_file("register.html")
+    try:
+        return app.send_static_file("register.html")
+    except Exception as e:
+        return jsonify({"error": "register.html not found", "message": str(e)}), 404
 
 @app.route("/question")
 def serve_question():
-    return app.send_static_file("question.html")
+    try:
+        return app.send_static_file("question.html")
+    except Exception as e:
+        return jsonify({"error": "question.html not found", "message": str(e)}), 404
 
-# Serve static files (CSS, JS, etc.)
+# Serve static files (CSS, JS, etc.) with error handling
 @app.route("/<path:path>")
 def static_proxy(path):
-    return send_from_directory(app.static_folder, path)
+    try:
+        return send_from_directory(app.static_folder, path)
+    except Exception as e:
+        return jsonify({"error": f"File {path} not found", "message": str(e)}), 404
+
+# Add error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({
+        "error": "Not Found",
+        "message": "The requested URL was not found on the server.",
+        "available_endpoints": [
+            "/health",
+            "/login (POST)",
+            "/register (POST)", 
+            "/get-questions (POST)",
+            "/generate-feedback (POST)",
+            "/calculate-score (POST)"
+        ]
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({
+        "error": "Internal Server Error",
+        "message": "The server encountered an internal error."
+    }), 500
 
 if __name__ == "__main__":
-    # Use Railway's PORT environment variable
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
+    print(f"Starting Flask app on port {port}")
+    print(f"BASE_DIR: {BASE_DIR}")
+    print(f"Static folder: {app.static_folder}")
     app.run(host="0.0.0.0", port=port, debug=False)
