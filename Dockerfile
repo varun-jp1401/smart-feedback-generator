@@ -1,7 +1,8 @@
 FROM python:3.10-slim
 
 # Set working directory
-WORKDIR /backend
+WORKDIR /app
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -26,7 +27,8 @@ COPY . .
 RUN mkdir -p data
 COPY data/ ./data/
 
-# List files to verify data is copied (for debugging)
+# List files to verify structure (for debugging)
+RUN echo "Files in working directory:" && ls -la
 RUN echo "Files in data directory:" && ls -la data/ || echo "No data directory found"
 
 # Health check endpoint
