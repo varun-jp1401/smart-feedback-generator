@@ -20,7 +20,7 @@ RUN pip install --upgrade pip && \
 # Try to download spaCy model, but don't fail if it doesn't work
 RUN python -m spacy download en_core_web_sm || echo "spaCy model download failed, continuing..."
 
-# Copy the application code
+# Copy the entire project structure
 COPY . .
 
 # Create necessary directories and ensure data folder is copied
@@ -39,4 +39,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
 EXPOSE $PORT
 
 # Use Flask's built-in server with better error handling
-CMD ["python", "app.py"]
+CMD ["python", "backend/app.py"]
