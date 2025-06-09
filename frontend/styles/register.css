@@ -5,6 +5,7 @@ body {
     background-size: cover;
     background-position: center;
     font-family: 'Roboto', Arial, sans-serif;
+    padding-bottom: 1000px;
 }
 
 .register-container {
