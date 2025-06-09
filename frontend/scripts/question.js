@@ -17,7 +17,7 @@ window.onload = async () => {
     document.getElementById("grade").innerText = `Grade ${grade}`;
 
     try {
-        const response = await fetch("http://127.0.0.1:5000/get-questions", {
+        const response = await fetch("/get-questions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username })
@@ -54,7 +54,6 @@ function renderPalette() {
     updateEarlySubmitButton(); 
 }
 
-
 function updateEarlySubmitButton() {
     const earlySubmitBtn = document.getElementById("early-submit-btn");
     const answeredCount = status.filter(s => s === "answered").length;
@@ -69,21 +68,14 @@ function updateEarlySubmitButton() {
 
 function showQuestion() {
     document.getElementById("feedback").innerText = "";
-    
     document.getElementById("student-answer").value = userAnswers[currentQuestionIndex] || "";
-    
     document.getElementById("question-text").innerText = questions[currentQuestionIndex].Question;
 
     if (status[currentQuestionIndex] === "answered") {
         document.getElementById("submit-btn").style.display = "none";
         document.getElementById("retry-btn").style.display = "inline-block";
-        if (currentQuestionIndex < questions.length - 1) {
-            document.getElementById("next-btn").style.display = "inline-block";
-            document.getElementById("next-btn").innerText = "Next";
-        } else {
-            document.getElementById("next-btn").innerText = "Submit Test";
-            document.getElementById("next-btn").style.display = "inline-block";
-        }
+        document.getElementById("next-btn").style.display = "inline-block";
+        document.getElementById("next-btn").innerText = currentQuestionIndex < questions.length - 1 ? "Next" : "Submit Test";
     } else {
         document.getElementById("submit-btn").style.display = "inline-block";
         document.getElementById("retry-btn").style.display = "none";
@@ -112,7 +104,7 @@ async function submitAnswer() {
     const { Question, Answer } = questions[currentQuestionIndex];
 
     try {
-        const response = await fetch("http://127.0.0.1:5000/generate-feedback", {
+        const response = await fetch("/generate-feedback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -130,14 +122,8 @@ async function submitAnswer() {
 
         document.getElementById("submit-btn").style.display = "none";
         document.getElementById("retry-btn").style.display = "inline-block";
-
-        if (currentQuestionIndex < questions.length - 1) { 
-            document.getElementById("next-btn").style.display = "inline-block";
-            document.getElementById("next-btn").innerText = "Next";
-        } else {
-            document.getElementById("next-btn").innerText = "Submit Test";
-            document.getElementById("next-btn").style.display = "inline-block";
-        }
+        document.getElementById("next-btn").style.display = "inline-block";
+        document.getElementById("next-btn").innerText = currentQuestionIndex < questions.length - 1 ? "Next" : "Submit Test";
     } catch (error) {
         feedbackBox.innerText = "❌ Error generating feedback. Please try again.";
         console.error("Error:", error);
@@ -149,7 +135,6 @@ async function submitAnswer() {
 
 function retryQuestion() {
     document.getElementById("feedback").innerText = "";
-
     document.getElementById("submit-btn").style.display = "inline-block";
     document.getElementById("retry-btn").style.display = "none";
     document.getElementById("next-btn").style.display = "none";
@@ -169,11 +154,9 @@ async function nextQuestion() {
         renderPalette();
         showQuestion();
     } else {
-     
         await calculateAndShowScore();
     }
 }
-
 
 async function earlySubmit() {
     const answeredCount = status.filter(s => s === "answered").length;
@@ -183,10 +166,7 @@ async function earlySubmit() {
         return;
     }
     
-    const confirmMessage = `You have answered ${answeredCount} out of ${questions.length} questions. Are you sure you want to submit the test now?`;
-    
-    if (confirm(confirmMessage)) {
-      
+    if (confirm(`You have answered ${answeredCount} out of ${questions.length} questions. Are you sure you want to submit the test now?`)) {
         userAnswers[currentQuestionIndex] = document.getElementById("student-answer").value.trim();
         await calculateAndShowScore();
     }
@@ -194,16 +174,13 @@ async function earlySubmit() {
 
 async function calculateAndShowScore() {
     try {
-       
         document.getElementById("question-text").innerText = "Calculating your score...";
         document.getElementById("feedback").innerHTML = '<div class="loader">🔄 Processing your answers...</div>';
-        
-       
         document.getElementById("submit-btn").style.display = "none";
         document.getElementById("retry-btn").style.display = "none";
         document.getElementById("next-btn").style.display = "none";
         
-        const response = await fetch("http://127.0.0.1:5000/calculate-score", {
+        const response = await fetch("/calculate-score", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -241,7 +218,6 @@ function displayScoreResults(scoreData) {
                     Grade: ${scoreData.grade}
                 </div>
             </div>
-            
             <div class="question-breakdown">
                 <h4>Question-wise Breakdown:</h4>
                 ${scoreData.question_scores.map(q => `
@@ -254,7 +230,6 @@ function displayScoreResults(scoreData) {
                     </div>
                 `).join('')}
             </div>
-            
             <div class="score-explanation">
                 <h4>Scoring Criteria:</h4>
                 <ul>
@@ -263,7 +238,6 @@ function displayScoreResults(scoreData) {
                     <li><strong>Partial marks</strong> awarded for partial coverage/accuracy</li>
                 </ul>
             </div>
-            
             <div class="action-buttons">
                 <button onclick="showAnswerReview()" class="review-btn">Review Answers</button>
                 <button onclick="restartTest()" class="restart-btn">Take Another Test</button>
@@ -273,8 +247,7 @@ function displayScoreResults(scoreData) {
     `;
 
     document.getElementById("feedback").innerHTML = scoreHtml;
-    
-    
+
     setTimeout(() => {
         const scoreFills = document.querySelectorAll('.score-fill');
         scoreFills.forEach(fill => {
@@ -299,7 +272,6 @@ function showAnswerReview() {
                         <h4>Question ${index + 1}:</h4>
                         <p class="question-text">${q.Question}</p>
                     </div>
-                    
                     <div class="answers-grid">
                         <div class="your-answer">
                             <h5>Your Answer:</h5>
@@ -307,7 +279,6 @@ function showAnswerReview() {
                                 ${userAnswers[index] || '<em>No answer provided</em>'}
                             </div>
                         </div>
-                        
                         <div class="ideal-answer">
                             <h5>Ideal Answer:</h5>
                             <div class="answer-content ideal">
@@ -315,13 +286,11 @@ function showAnswerReview() {
                             </div>
                         </div>
                     </div>
-                    
                     <div class="comparison-note">
                         ${getComparisonNote(userAnswers[index], q.Answer)}
                     </div>
                 </div>
             `).join('')}
-            
             <div class="review-actions">
                 <button onclick="backToScore()" class="back-btn">Back to Score</button>
                 <button onclick="restartTest()" class="restart-btn">Take Another Test</button>
@@ -337,16 +306,16 @@ function getComparisonNote(studentAnswer, idealAnswer) {
     if (!studentAnswer || studentAnswer.trim() === '') {
         return '<div class="comparison-note missed">❌ You did not answer this question.</div>';
     }
-    
+
     const studentWords = studentAnswer.toLowerCase().split(/\s+/);
     const idealWords = idealAnswer.toLowerCase().split(/\s+/);
-    
-    const commonWords = studentWords.filter(word => 
+
+    const commonWords = studentWords.filter(word =>
         idealWords.some(idealWord => idealWord.includes(word) || word.includes(idealWord))
     );
-    
+
     const coverage = (commonWords.length / idealWords.length) * 100;
-    
+
     if (coverage >= 70) {
         return '<div class="comparison-note excellent">✅ Excellent! Your answer covers most key points.</div>';
     } else if (coverage >= 50) {
@@ -358,25 +327,19 @@ function getComparisonNote(studentAnswer, idealAnswer) {
     }
 }
 
-
 function backToScore() {
-   
-    location.reload(); 
+    location.reload();
 }
 
 function restartTest() {
-   
     currentQuestionIndex = 0;
     status = ["not-visited", "not-visited", "not-visited", "not-visited", "not-visited"];
     userAnswers = ["", "", "", "", ""];
-    
-    
     window.location.reload();
 }
 
 function jumpToQuestion(index) {
     userAnswers[currentQuestionIndex] = document.getElementById("student-answer").value.trim();
-    
     currentQuestionIndex = index;
     if (status[currentQuestionIndex] === "not-visited") {
         status[currentQuestionIndex] = "not-answered";
