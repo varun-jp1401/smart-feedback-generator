@@ -4,6 +4,9 @@ body {
     background-image: url('../images/bg.webp');  /* ✅ your background image */
     background-size: cover;
     background-position: center;
+    background-repeat: no-repeat; /* ✅ ADD THIS LINE */
+    background-attachment: fixed; /* ✅ ADD THIS LINE (optional - keeps background fixed while scrolling) */
+    min-height: 100vh; 
     font-family: 'Roboto', Arial, sans-serif;
 }
 
