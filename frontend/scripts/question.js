@@ -2,6 +2,7 @@ let questions = [];
 let currentQuestionIndex = 0;
 let status = ["not-visited", "not-visited", "not-visited", "not-visited", "not-visited"];
 let userAnswers = ["", "", "", "", ""]; 
+let scoreData = null; // Add this to store score data
 
 window.onload = async () => {
     const username = localStorage.getItem("username");
@@ -189,7 +190,7 @@ async function calculateAndShowScore() {
             })
         });
 
-        const scoreData = await response.json();
+        scoreData = await response.json(); // Store the score data
 
         if (response.ok) {
             displayScoreResults(scoreData);
@@ -327,14 +328,22 @@ function getComparisonNote(studentAnswer, idealAnswer) {
     }
 }
 
+// Fixed backToScore function
 function backToScore() {
-    location.reload();
+    if (scoreData) {
+        displayScoreResults(scoreData); // Use stored score data instead of reloading
+    } else {
+        // Fallback if score data is lost
+        alert("Score data not available. Please retake the test.");
+        restartTest();
+    }
 }
 
 function restartTest() {
     currentQuestionIndex = 0;
     status = ["not-visited", "not-visited", "not-visited", "not-visited", "not-visited"];
     userAnswers = ["", "", "", "", ""];
+    scoreData = null; // Clear score data
     window.location.reload();
 }
 
