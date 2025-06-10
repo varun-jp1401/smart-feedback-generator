@@ -7,11 +7,12 @@ import time
 import random
 import pandas as pd
 import spacy 
-import mysql.connector
-from mysql.connector import Error
 from difflib import SequenceMatcher
 import os
 from dotenv import load_dotenv
+import psycopg2
+from psycopg2 import OperationalError
+
 load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -47,12 +48,10 @@ HEADERS = {
 # Database configuration
 DB_CONFIG = {
     'host': os.getenv("DB_HOST"),
+    'database': os.getenv("DB_NAME"),
     'user': os.getenv("DB_USER"),
     'password': os.getenv("DB_PASSWORD"),
-    'database': os.getenv("DB_NAME"),
-    'port': int(os.getenv("DB_PORT", 3306)),
-    'charset': 'utf8mb4',  # Changed to utf8mb4 for better compatibility
-    'autocommit': True
+    'port': int(os.getenv("DB_PORT", 5432))
 }
 
 print("=== Environment Check ===")
@@ -72,16 +71,15 @@ else:
     print("❌ Frontend directory not found")
 
 def get_db_connection():
-    """Get database connection with better error handling"""
     try:
-        print("Attempting to connect to database...")
-        conn = mysql.connector.connect(**DB_CONFIG)
-        print("✓ Database connection successful")
+        print("Attempting to connect to PostgreSQL...")
+        conn = psycopg2.connect(**DB_CONFIG)
+        print("✓ PostgreSQL connection successful")
         return conn
-    except Error as e:
-        print(f"❌ Database connection error: {e}")
-        print(f"Connection details: {DB_CONFIG['host']}:{DB_CONFIG['port']} as {DB_CONFIG['user']}")
+    except OperationalError as e:
+        print(f"❌ PostgreSQL connection error: {e}")
         raise
+
 
 def init_database():
     """Initialize database tables"""
@@ -92,13 +90,14 @@ def init_database():
         # Create users table if it doesn't exist
         create_users_table = """
         CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             username VARCHAR(50) UNIQUE NOT NULL,
             password VARCHAR(255) NOT NULL,
             grade INT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        );
         """
+
         
         cursor.execute(create_users_table)
         conn.commit()
@@ -113,7 +112,7 @@ def init_database():
         columns = cursor.fetchall()
         print(f"Users table structure: {columns}")
         
-    except Error as e:
+    except Exception as e:
         print(f"❌ Database initialization error: {e}")
     finally:
         if 'cursor' in locals(): 
@@ -451,7 +450,7 @@ def register():
         
         return jsonify({"message": "User registered successfully!"})
         
-    except Error as e:
+    except Exception as e:
         print(f"❌ Database error during registration: {e}")
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
@@ -486,7 +485,7 @@ def login():
         else:
             return jsonify({"error": "Invalid username or password"}), 401
             
-    except Error as e:
+    except Exception as e:
         print(f"❌ Database error during login: {e}")
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
