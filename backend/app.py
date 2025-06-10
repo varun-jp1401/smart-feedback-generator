@@ -104,13 +104,23 @@ def init_database():
         print("✓ Database tables initialized successfully")
         
         # Check if table exists and show structure
-        cursor.execute("SHOW TABLES;")
-        tables = cursor.fetchall()
-        print(f"Available tables: {tables}")
-        
-        cursor.execute("DESCRIBE users;")
+        cursor.execute("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'users';
+        """)
         columns = cursor.fetchall()
         print(f"Users table structure: {columns}")
+
+        
+        cursor.execute("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'users';
+        """)
+        columns = cursor.fetchall()
+        print(f"Users table structure: {columns}")
+
         
     except Exception as e:
         print(f"❌ Database initialization error: {e}")
